@@ -1,0 +1,34 @@
+from IMojoCodec import Codecs  
+from IMojoCodec.utils import Array
+
+from time import sleep
+
+alias bmp = Codecs.bmp
+
+struct Image():
+
+    fn __init__(inout self, file: Path) raises:
+       
+        let header: bmp.BmpHeader
+        if file.suffix() == ".bmp":
+            var bmpCodec: bmp.BmpCodec
+            let bytes: Array[SIMD[DType.int8, 1]]
+            print("opening file: ", file)
+            with open(file, "r") as f:
+
+
+                let b = f.read_bytes()
+                bytes = Array[SIMD[DType.int8, 1]](b)
+                print("size: ", bytes.size)
+                # print("checking signature")
+                if not bmpCodec.check_signature(bytes[:2]):
+                    raise Error("no bmp signature")
+
+                # print("getting header")
+                let header = bytes[2:14]
+                # print("reading codec")
+                bmpCodec = bmp.BmpCodec(header)
+                let img = bmpCodec.decode[DType.uint8](bytes[14:])
+                  
+        else:
+            print("unknown format", file.suffix())

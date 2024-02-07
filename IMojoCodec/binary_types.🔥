@@ -1,0 +1,7 @@
+
+alias i8 = SIMD[DType.int8, 1]
+alias i16 = SIMD[DType.int16, 1]
+
+alias ui8 = SIMD[DType.uint8, 1]
+alias ui16 = SIMD[DType.uint16, 1]
+alias ui32 = SIMD[DType.uint32, 1]

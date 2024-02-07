@@ -1,0 +1,15 @@
+from IMojoCodec.utils import Array
+
+trait Codec:
+
+    fn decode[dtype: DType](inout self, data: Array[SIMD[DType.int8, 1]]) raises -> Tensor[dtype]:
+        ...
+
+    @staticmethod
+    fn encode[dtype: DType](data: Array[SIMD[DType.int8, 1]]) raises -> Tensor[DType.uint8]:
+        ...
+    
+    @staticmethod
+    fn check_signature(data: Array[SIMD[DType.int8, 1]]) raises -> Bool:
+        ...
+

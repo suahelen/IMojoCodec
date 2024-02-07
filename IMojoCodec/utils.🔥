@@ -1,0 +1,129 @@
+from memory.unsafe import bitcast
+from testing import assert_true
+from math.bit import bitreverse
+from algorithm import parallelize, async_parallelize
+
+struct Endian():
+    alias big = 1
+    alias little = 2
+
+
+fn concat_bytes[endian: Int = Endian.little](items: Array[SIMD[DType.int8, 1]]) raises -> SIMD[DType.uint32, 1]:
+    if items.size == 4:
+        return concat_4_byte[endian](items)
+    else:
+        raise Error("Unknown size: "+ str(items.size))
+
+fn concat_2_byte[endian: Int = Endian.little](items: Array[SIMD[DType.int8, 1]]) raises -> SIMD[DType.uint16, 1]:
+    assert_true(len(items) == 2, "Len of items is not 2" )
+
+    if endian == Endian.big:
+        let res = (cast2uint16(bitreverse(items[0])) << 8)
+            | cast2uint16(bitreverse(items[1]))
+        return res
+
+    elif endian == Endian.little:
+        let res = (cast2uint16(items[0]))
+            | (cast2uint16(items[1]) << 8)
+        return res
+    else: 
+        raise Error("Invalid endian type")
+
+
+
+fn concat_4_byte[endian: Int = Endian.little](items: Array[SIMD[DType.int8, 1]]) raises -> SIMD[DType.uint32, 1]:
+    assert_true(len(items) == 4, "Len of items is not 4" )
+    if endian == Endian.big:
+        let res = (cast2uint32(bitreverse(items[0])) << 24)
+            | (cast2uint32(bitreverse(items[1])) << 16)
+            | (cast2uint32(bitreverse(items[2])) << 8)
+            | (cast2uint32(bitreverse(items[3])))
+        return res
+    elif endian == Endian.little:
+        let res = (cast2uint32(items[0])
+            | (cast2uint32(items[1]) << 8)
+            | (cast2uint32(items[2]) << 16)
+            | (cast2uint32(items[3]) << 24))
+        return res
+    else: 
+        raise Error("Invalid endian type")
+
+fn cast2uint32(src: SIMD[DType.int8, 1]) -> SIMD[DType.uint32, 1]:
+    let tmp = memory.unsafe.bitcast[DType.uint8](src)
+    let out = SIMD[DType.uint32, 1](tmp.to_int())
+    return out
+    
+fn cast2uint16(src: SIMD[DType.int8, 1]) -> SIMD[DType.uint16, 1]:
+    let tmp = memory.unsafe.bitcast[DType.uint8](src)
+    let out = SIMD[DType.uint16, 1](tmp.to_int())
+    return out
+
+
+struct Array[T: AnyRegType](Sized):
+    var data: Pointer[T]
+    var size: Int
+
+    fn __init__(inout self, size: Int):
+        self.size = size
+        self.data = Pointer[T].alloc(self.size)
+
+    fn __init__(inout self, *elements: T):
+        self.size = len(elements)
+        self.data = Pointer[T].alloc(self.size)
+        for i in range(self.size):
+            self.data.store(i, elements[i])
+
+    fn __init__(inout self, src: Tensor[DType.int8]) raises:
+        self.size = src.shape()[0]
+        self.data = Pointer[T].alloc(self.size)
+        @parameter
+        fn add_val(idx: Int):
+            self.data.store(idx, src.data().offset(idx).load())
+
+        for i in range(self.size):
+            add_val(i)
+
+    fn __copyinit__(inout self, other: Self):
+        self.size = other.size
+        self.data = Pointer[T].alloc(self.size)
+        for i in range(self.size):
+            self.data.store(i, other.data.load(i))
+
+    fn __del__(owned self):
+        self.data.free()
+
+    fn __getitem__(self, i: Int) raises -> T:
+        if (i < self.size):
+            return self.data.load(i)
+        else:
+            raise Error("Out of bounds")
+
+    fn _adjust_slice_(self, inout span: slice, size: Int):
+        if span.start < 0:
+            span.start = size + span.start
+        if not span._has_end():
+            span.end = size
+        elif span.end < 0:
+            span.end = size + span.end
+        if span.end > size:
+            span.end = size
+        if span.end < span.start:
+            span.start = 0
+            span.end = 0
+
+    fn __getitem__(self, owned s: slice) raises -> Self:
+        self._adjust_slice_(s, self.size)
+        var sliced = Self(size = s.__len__())
+
+        @parameter
+        fn param_slice(i: Int):
+            sliced.data.store(i, self.data.offset(s[i]).load())
+
+        for i in range(s.__len__()):
+            param_slice(i)
+
+        return sliced
+
+
+    fn __len__(self) -> Int:
+        return self.size
